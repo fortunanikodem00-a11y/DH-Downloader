@@ -1,0 +1,100 @@
+[gd_scene load_steps=2 format=3 uid="uid://notepad_app_embedded"]
+
+[sub_resource type="GDScript" id="GDScript_notepad"]
+script/source = "extends Control
+
+@onready var file_input: LineEdit = $VBoxContainer/HeaderBox/FilenameInput
+@onready var text_edit: TextEdit = $VBoxContainer/TextEditor
+@onready var status_label: Label = $VBoxContainer/StatusLabel
+@onready var save_button: Button = $VBoxContainer/HeaderBox/SaveButton
+
+const NOTES_DIR = \"user://notes/\"
+
+func _ready() -> void:
+	var dir = DirAccess.open(\"user://\")
+	if not dir.dir_exists(\"notes\"):
+		dir.make_dir(\"notes\")
+		
+	save_button.pressed.connect(_on_save_pressed)
+	file_input.text = \"notatka.txt\"
+	status_label.text = \"Notatnik gotowy do pracy.\"
+
+func _on_save_pressed() -> void:
+	var filename = file_input.text.strip_edges()
+	if filename == \"\":
+		filename = \"notatka.txt\"
+	if not filename.ends_with(\".txt\"):
+		filename += \".txt\"
+		
+	var full_path = NOTES_DIR + filename
+	var file = FileAccess.open(full_path, FileAccess.WRITE)
+	if file:
+		file.store_string(text_edit.text)
+		file.close()
+		status_label.text = \"Zapisano pomyślnie: \" + filename
+	else:
+		status_label.text = \"Błąd zapisu pliku!\"
+"
+
+[node name="NotepadApp" type="Control"]
+custom_minimum_size = Vector2(400, 350)
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -175.0
+offset_right = 200.0
+offset_bottom = 175.0
+grow_horizontal = 2
+grow_vertical = 2
+script = SubResource("GDScript_notepad")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.12, 0.13, 0.18, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Notatnik OS"
+horizontal_alignment = 1
+
+[node name="HeaderBox" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="FilenameInput" type="LineEdit" parent="VBoxContainer/HeaderBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Nazwa pliku..."
+
+[node name="SaveButton" type="Button" parent="VBoxContainer/HeaderBox"]
+layout_mode = 2
+text = "Zapisz"
+
+[node name="TextEditor" type="TextEdit" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+placeholder_text = "Wpisz tekst swojej notatki tutaj..."
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Status..."
