@@ -1,0 +1,140 @@
+[gd_scene load_steps=2 format=3 uid="uid://file_manager_app_embedded"]
+
+[sub_resource type="GDScript" id="GDScript_file_manager"]
+script/source = "extends Control
+
+@onready var file_list: ItemList = $VBoxContainer/ItemList
+@onready var status_label: Label = $VBoxContainer/StatusLabel
+@onready var refresh_button: Button = $VBoxContainer/HBoxContainer/RefreshButton
+@onready var launch_button: Button = $VBoxContainer/HBoxContainer/LaunchButton
+@onready var delete_button: Button = $VBoxContainer/HBoxContainer/DeleteButton
+
+var selected_file: String = \"\"
+
+func _ready() -> void:
+	refresh_button.pressed.connect(_load_files)
+	launch_button.pressed.connect(_on_launch_pressed)
+	delete_button.pressed.connect(_on_delete_pressed)
+	file_list.item_selected.connect(_on_item_selected)
+	
+	_load_files()
+
+func _load_files() -> void:
+	file_list.clear()
+	selected_file = \"\"
+	
+	var dir = DirAccess.open(\"user://\")
+	if dir:
+		dir.list_dir_begin()
+		var file_name = dir.get_next()
+		while file_name != \"\":
+			if not dir.current_is_dir() and file_name.ends_with(\".tscn\"):
+				# Nie pokazujemy samego siebie na liście menedżera, żeby uniknąć zapętlenia
+				if file_name != \"file_manager.tscn\":
+					file_list.add_item(file_name)
+			file_name = dir.get_next()
+		status_label.text = \"Znaleziono zainstalowanych aplikacji: \" + str(file_list.item_count)
+	else:
+		status_label.text = \"Błąd dostępu do katalogu user://\"
+
+func _on_item_selected(index: int) -> void:
+	selected_file = file_list.get_item_text(index)
+	status_label.text = \"Wybrano: \" + selected_file
+
+func _on_launch_pressed() -> void:
+	if selected_file == \"\":
+		status_label.text = \"Najpierw zaznacz aplikację z listy!\"
+		return
+		
+	var full_path = \"user://\" + selected_file
+	if FileAccess.file_exists(full_path):
+		var packed_scene = load(full_path)
+		if packed_scene:
+			var instance = packed_scene.instantiate()
+			# Wrzucamy uruchomioną apkę do głównego okna nadrzędnego
+			get_parent().add_child(instance)
+			status_label.text = \"Uruchomiono: \" + selected_file
+	else:
+		status_label.text = \"Błąd: Plik nie istnieje na dysku.\"
+
+func _on_delete_pressed() -> void:
+	if selected_file == \"\":
+		status_label.text = \"Najpierw zaznacz aplikację do usunięcia!\"
+		return
+		
+	var full_path = \"user://\" + selected_file
+	var err = DirAccess.remove_absolute(full_path)
+	if err == OK:
+		status_label.text = \"Usunięto pomyślnie: \" + selected_file
+		_load_files()
+	else:
+		status_label.text = \"Błąd podczas usuwania pliku!\"
+"
+
+[node name="FileManagerApp" type="Control"]
+custom_minimum_size = Vector2(400, 350)
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -175.0
+offset_right = 200.0
+offset_bottom = 175.0
+grow_horizontal = 2
+grow_vertical = 2
+script = SubResource("GDScript_file_manager")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.14, 0.15, 0.2, 1)
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Title" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Menedżer Plików & Aplikacji"
+horizontal_alignment = 1
+
+[node name="ItemList" type="ItemList" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="RefreshButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Odśwież"
+
+[node name="LaunchButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Uruchom"
+
+[node name="DeleteButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Usuń"
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Skanowanie systemu..."
