@@ -1,0 +1,109 @@
+[gd_scene load_steps=2 format=3 uid="uid://full_browser_app"]
+
+[sub_resource type="GDScript" id="GDScript_full_browser"]
+script/source = "extends Control
+
+@onready var url_input: LineEdit = $VBoxContainer/TopBar/UrlInput
+@onready var back_btn: Button = $VBoxContainer/TopBar/BackBtn
+@onready var forward_btn: Button = $VBoxContainer/TopBar/ForwardBtn
+@onready var reload_btn: Button = $VBoxContainer/TopBar/ReloadBtn
+@onready var go_btn: Button = $VBoxContainer/TopBar/GoBtn
+@onready var download_btn: Button = $VBoxContainer/TopBar/DownloadBtn
+
+# Integracja z systemowym silnikiem przeglądarki / pobierania
+var webview = null
+
+func _ready() -> void:
+	go_btn.pressed.connect(_on_go_pressed)
+	url_input.text_submitted.connect(_on_url_submitted)
+	download_btn.pressed.connect(_on_download_via_dh)
+	
+	# Jeśli uruchomione w środowisku wspierającym natywny webview/CEF
+	if ClassDB.class_exists(\"WebView\"):
+		webview = ClassDB.instantiate(\"WebView\")
+		$VBoxContainer/BrowserContainer.add_child(webview)
+
+func _on_go_pressed() -> void:
+	_load_url(url_input.text)
+
+func _on_url_submitted(new_text: String) -> void:
+	_load_url(new_text)
+
+func _load_url(target_url: String) -> void:
+	var formatted_url = target_url.strip_edges()
+	if not formatted_url.begins_with(\"http://\") and not formatted_url.begins_with(\"https://\"):
+		formatted_url = \"https://\" + formatted_url
+	
+	url_input.text = formatted_url
+	
+	if webview and webview.has_method(\"load_url\"):
+		webview.call(\"load_url\", formatted_url)
+	else:
+		# Fallback: Otwarcie w systemowej przeglądarce OS dla pełnego wsparcia JS/HTML5
+		OS.shell_open(formatted_url)
+
+func _on_download_via_dh() -> void:
+	var current_url = url_input.text
+	print(\"[Browser] Przekazywanie adresu do dhdownloader: \", current_url)
+	# Tutaj podpinasz wywołanie dhdownloada z wybraną ścieżką docelową
+"
+
+[node name="Browser" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = SubResource("GDScript_full_browser")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 6
+
+[node name="TopBar" type="HBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BackBtn" type="Button" parent="VBoxContainer/TopBar"]
+custom_minimum_size = Vector2(35, 0)
+layout_mode = 2
+text = "<"
+
+[node name="ForwardBtn" type="Button" parent="VBoxContainer/TopBar"]
+custom_minimum_size = Vector2(35, 0)
+layout_mode = 2
+text = ">"
+
+[node name="ReloadBtn" type="Button" parent="VBoxContainer/TopBar"]
+custom_minimum_size = Vector2(35, 0)
+layout_mode = 2
+text = "R"
+
+[node name="UrlInput" type="LineEdit" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Wpisz adres URL lub wyszukaj..."
+
+[node name="GoBtn" type="Button" parent="VBoxContainer/TopBar"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Idź"
+
+[node name="DownloadBtn" type="Button" parent="VBoxContainer/TopBar"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "Pobierz przez DH"
+
+[node name="BrowserContainer" type="PanelContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
