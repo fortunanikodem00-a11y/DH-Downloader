@@ -1,20 +1,24 @@
-[gd_scene load_steps=2 format=3 uid="uid://aether_rendered_browser"]
+[gd_scene load_steps=2 format=3 uid="uid://aether_plugin_browser"]
 
-[sub_resource type="GDScript" id="GDScript_renderer"]
+[sub_resource type="GDScript" id="GDScript_plugin_browser"]
 script/source = "extends Control
 
 @onready var url_input: LineEdit = $VBoxContainer/TopBar/UrlInput
 @onready var go_btn: Button = $VBoxContainer/TopBar/GoBtn
-@onready var render_viewport: ScrollContainer = $VBoxContainer/RenderArea
-@onready var page_container: VBoxContainer = $VBoxContainer/RenderArea/PageContainer
-@onready var http_request: HTTPRequest = $HTTPRequest
 @onready var status_label: Label = $VBoxContainer/StatusLabel
+
+# Tutaj odwołujemy się do węzła wtyczki WebView / CEF dostarczonego przez plugin
+@onready var browser_view = $VBoxContainer/BrowserContainer/WebViewNode 
 
 func _ready() -> void:
 	go_btn.pressed.connect(_on_go_pressed)
 	url_input.text_submitted.connect(_on_url_submitted)
-	http_request.request_completed.connect(_on_request_completed)
-	url_input.text = \"https://\"
+	
+	# Jeśli wtyczka ma sygnał ładowania, podpinamy go tutaj
+	# browser_view.url_changed.connect(_on_url_changed)
+	
+	url_input.text = \"https://www.youtube.com\"
+	_load_url(url_input.text)
 
 func _on_go_pressed() -> void:
 	_load_url(url_input.text)
@@ -28,77 +32,25 @@ func _load_url(target_url: String) -> void:
 		url = \"https://\" + url
 	url_input.text = url
 	
-	status_label.text = \"Status: Pobieranie...\"
-	_clear_page()
+	status_label.text = \"Status: Ładowanie przez wtyczkę...\"
 	
-	var err = http_request.request(url)
-	if err != OK:
-		status_label.text = \"Status: Błąd żądania HTTP (\" + str(err) + \")\"
-
-func _clear_page() -> void:
-	for child in page_container.get_children():
-		child.queue_free()
-
-func _on_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray) -> void:
-	if response_code != 200:
-		status_label.text = \"Status: Błąd HTTP \" + str(response_code)
-		return
-	
-	var content = body.get_string_from_utf8()
-	
-	# TEST 1: Czy to jest plik sceny Godota (.tscn)?
-	if content.begins_with(\"[gd_scene\") or content.begins_with(\"[gd_resource\"):
-		status_label.text = \"Status: Wykryto scenę .tscn - Renderowanie aplikacji...\"
-		_render_tscn_scene(content)
+	# Bezpieczne wywołanie metody ładowania URL z zainstalowanej wtyczki WebView/CEF
+	if browser_view and browser_view.has_method(\"load_url\"):
+		browser_view.load_url(url)
+	elif browser_view and \"url\" in browser_view:
+		browser_view.url = url
 	else:
-		# TEST 2: Zwykła strona / HTML - Renderujemy interfejs tekstowy
-		status_label.text = \"Status: Wyrenderowano (200 OK)\"
-		_render_html_content(content)
-
-func _render_tscn_scene(tscn_data: String) -> void:
-	var temp_path = \"user://temp_page.tscn\"
-	var file = FileAccess.open(temp_path, FileAccess.WRITE)
-	if file:
-		file.store_string(tscn_data)
-		file.close()
-		
-		# Wczytanie i zainstancjonowanie żywej sceny
-		var scene_resource = load(temp_path)
-		if scene_resource:
-			var instance = scene_resource.instantiate()
-			page_container.add_child(instance)
-		else:
-			status_label.text = \"Status: Błąd wczytywania zasobu .tscn\"
-
-func _render_html_content(raw_html: String) -> void:
-	var rich_label = RichTextLabel.new()
-	rich_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	rich_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	rich_label.fit_content = true
-	rich_label.bbcode_enabled = true
-	
-	# Prosta konwersja czystego HTML na czytelny BBCode Godota
-	var formatted_text = raw_html
-	formatted_text = formatted_text.replace(\"<h1>\", \"[font_size=24][b]\").replace(\"</h1>\", \"[/b][/font_size]\\n\")
-	formatted_text = formatted_text.replace(\"<h2>\", \"[font_size=20][b]\").replace(\"</h2>\", \"[/b][/font_size]\\n\")
-	formatted_text = formatted_text.replace(\"<p>\", \"\").replace(\"</p>\", \"\\n\\n\")
-	formatted_text = formatted_text.replace(\"<b>\", \"[b]\").replace(\"</b>\", \"[/b]\")
-	formatted_text = formatted_text.replace(\"<i>\", \"[i]\").replace(\"</i>\", \"[/i]\")
-	
-	rich_label.text = formatted_text
-	page_container.add_child(rich_label)
+		status_label.text = \"Status: Błąd - Sprawdź nazwę węzła wtyczki!\"
 "
 
-[node name="AetherBrowser" type="Control"]
+[node name="AetherPluginBrowser" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = SubResource("GDScript_renderer")
-
-[node name="HTTPRequest" type="HTTPRequest" parent="."]
+script = SubResource("GDScript_plugin_browser")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -120,7 +72,7 @@ theme_override_constants/separation = 8
 [node name="UrlInput" type="LineEdit" parent="VBoxContainer/TopBar"]
 layout_mode = 2
 size_flags_horizontal = 3
-placeholder_text = "Wpisz adres strony lub raw link do pliku .tscn..."
+placeholder_text = "Wpisz adres (np. https://www.youtube.com)..."
 
 [node name="GoBtn" type="Button" parent="VBoxContainer/TopBar"]
 custom_minimum_size = Vector2(80, 0)
@@ -131,11 +83,14 @@ text = "Idź"
 layout_mode = 2
 text = "Status: Gotowy"
 
-[node name="RenderArea" type="ScrollContainer" parent="VBoxContainer"]
+[node name="BrowserContainer" type="Control" parent="VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="PageContainer" type="VBoxContainer" parent="VBoxContainer/RenderArea"]
-layout_mode = 2
-size_flags_horizontal = 3
-size_flags_vertical = 3
+[node name="WebViewNode" type="Control" parent="VBoxContainer/BrowserContainer"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
