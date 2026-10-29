@@ -1,21 +1,24 @@
-[gd_scene load_steps=2 format=3 uid="uid://aether_plugin_browser"]
+[gd_scene load_steps=2 format=3 uid="uid://aether_gdcef_browser"]
 
-[sub_resource type="GDScript" id="GDScript_plugin_browser"]
-script/source = "extends Control
+[sub_resource type="GDScript" id="GDScript_gdcef"]
+script/source = "extends GDCEF
 
 @onready var url_input: LineEdit = $VBoxContainer/TopBar/UrlInput
 @onready var go_btn: Button = $VBoxContainer/TopBar/GoBtn
+@onready var browser_texture: TextureRect = $VBoxContainer/BrowserContainer/TextureRect
 @onready var status_label: Label = $VBoxContainer/StatusLabel
 
-# Tutaj odwołujemy się do węzła wtyczki WebView / CEF dostarczonego przez plugin
-@onready var browser_view = $VBoxContainer/BrowserContainer/WebViewNode 
+var browser = null
 
 func _ready() -> void:
 	go_btn.pressed.connect(_on_go_pressed)
 	url_input.text_submitted.connect(_on_url_submitted)
 	
-	# Jeśli wtyczka ma sygnał ładowania, podpinamy go tutaj
-	# browser_view.url_changed.connect(_on_url_changed)
+	# 1. Inicjalizacja CEF (wymagana przed utworzeniem przeglądarki)
+	var ok = initialize({})
+	if not ok:
+		status_label.text = \"Status: Błąd inicjalizacji gdCEF!\"
+		return
 	
 	url_input.text = \"https://www.youtube.com\"
 	_load_url(url_input.text)
@@ -32,25 +35,30 @@ func _load_url(target_url: String) -> void:
 		url = \"https://\" + url
 	url_input.text = url
 	
-	status_label.text = \"Status: Ładowanie przez wtyczkę...\"
+	status_label.text = \"Status: Ładowanie strony przez gdCEF...\"
 	
-	# Bezpieczne wywołanie metody ładowania URL z zainstalowanej wtyczki WebView/CEF
-	if browser_view and browser_view.has_method(\"load_url\"):
-		browser_view.load_url(url)
-	elif browser_view and \"url\" in browser_view:
-		browser_view.url = url
+	# 2. Tworzenie przeglądarki i przypisanie jej do TextureRect
+	if browser == null:
+		browser = create_browser(url, browser_texture, {})
+		if browser:
+			browser.set_name(\"aether_browser_view\")
+			status_label.text = \"Status: Strona załadowana wewnątrz aplikacji\"
+		else:
+			status_label.text = \"Status: Nie udało się utworzyć instancji browsera\"
 	else:
-		status_label.text = \"Status: Błąd - Sprawdź nazwę węzła wtyczki!\"
+		# Jeśli przeglądarka już istnieje, wywołujemy nawigację
+		if browser.has_method(\"load_url\"):
+			browser.load_url(url)
 "
 
-[node name="AetherPluginBrowser" type="Control"]
+[node name="AetherGdCefApp" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = SubResource("GDScript_plugin_browser")
+script = SubResource("GDScript_gdcef")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -81,16 +89,18 @@ text = "Idź"
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 layout_mode = 2
-text = "Status: Gotowy"
+text = "Status: Inicjalizacja..."
 
 [node name="BrowserContainer" type="Control" parent="VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
 
-[node name="WebViewNode" type="Control" parent="VBoxContainer/BrowserContainer"]
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/BrowserContainer"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+expand_mode = 1
+stretch_mode = 5
