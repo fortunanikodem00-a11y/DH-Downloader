@@ -1,48 +1,57 @@
 [gd_scene load_steps=2 format=3]
 
-[sub_resource type="GDScript" id="GDScript_janusz"]
+[sub_resource type="GDScript" id="GDScript_test"]
 script/source = "extends Control
 
+var results: Array[String] = []
+
 func _ready() -> void:
-    print(\"JANUSZ.EXE URUCHOMIONY\")
-    print(\"OSTRZEZENIE: ZA DUZO KOMPUTERA, ZA MALO TRAWY\")
+    results.append(\"JANUSZ.EXE — TEST BEZPIECZENSTWA\")
+    results.append(\"------------------------------\")
+
+    var close_button = find_child(\"X\", true, false)
+
+    if close_button != null:
+        results.append(\"[INFO] Znaleziono element X w swojej scenie.\")
+    else:
+        results.append(\"[INFO] Brak elementu X w drzewie sceny.\")
+        results.append(\"[INFO] X moze nalezec do nakladki systemowej.\")
+
+    results.append(\"\")
+    results.append(\"DOTKNIJ TRAWY 🌱\")
+
+    $Report.text = \"\\n\".join(results)
 
 func _on_close_pressed() -> void:
-    print(\"BLAD 404: TRAWY NIE ZNALEZIONO\")
+    print(\"JANUSZ: X NIE ZOSTANIE USUNIETY PRZEZ TEN TEST.\")
 "
 
-[node name="Janusz" type="Control"]
+[node name="JanuszAttackTest" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-script = SubResource("GDScript_janusz")
+script = SubResource("GDScript_test")
 
 [node name="Panel" type="Panel" parent="."]
-offset_left = 300.0
-offset_top = 180.0
-offset_right = 700.0
-offset_bottom = 380.0
+offset_left = 250.0
+offset_top = 150.0
+offset_right = 850.0
+offset_bottom = 470.0
 
-[node name="Title" type="Label" parent="Panel"]
+[node name="Report" type="Label" parent="Panel"]
 offset_left = 20.0
-offset_top = 15.0
-offset_right = 350.0
-offset_bottom = 45.0
-text = "JANUSZ.EXE"
-
-[node name="Message" type="Label" parent="Panel"]
-offset_left = 20.0
-offset_top = 70.0
-offset_right = 380.0
-offset_bottom = 110.0
-text = "DOTKNIJ TRAWY"
+offset_top = 20.0
+offset_right = 570.0
+offset_bottom = 280.0
+autowrap_mode = 2
+text = "Uruchamianie testu..."
 
 [node name="CloseButton" type="Button" parent="Panel"]
-offset_left = 330.0
-offset_top = 10.0
-offset_right = 380.0
-offset_bottom = 40.0
-text = "X"
+offset_left = 450.0
+offset_top = 260.0
+offset_right = 570.0
+offset_bottom = 300.0
+text = "ZAMKNIJ TEST"
 
 [connection signal="pressed" from="Panel/CloseButton" to="." method="_on_close_pressed"]
