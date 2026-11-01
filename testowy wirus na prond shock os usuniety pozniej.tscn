@@ -1,57 +1,53 @@
-[gd_scene load_steps=2 format=3]
+```ini
+[gd_scene format=3]
 
-[sub_resource type="GDScript" id="GDScript_test"]
-script/source = "extends Control
+[node name="JanuszTest" type="Control"]
 
-var results: Array[String] = []
-
-func _ready() -> void:
-    results.append(\"JANUSZ.EXE — TEST BEZPIECZENSTWA\")
-    results.append(\"------------------------------\")
-
-    var close_button = find_child(\"X\", true, false)
-
-    if close_button != null:
-        results.append(\"[INFO] Znaleziono element X w swojej scenie.\")
-    else:
-        results.append(\"[INFO] Brak elementu X w drzewie sceny.\")
-        results.append(\"[INFO] X moze nalezec do nakladki systemowej.\")
-
-    results.append(\"\")
-    results.append(\"DOTKNIJ TRAWY 🌱\")
-
-    $Report.text = \"\\n\".join(results)
-
-func _on_close_pressed() -> void:
-    print(\"JANUSZ: X NIE ZOSTANIE USUNIETY PRZEZ TEN TEST.\")
-"
-
-[node name="JanuszAttackTest" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-script = SubResource("GDScript_test")
+grow_horizontal = 2
+grow_vertical = 2
 
-[node name="Panel" type="Panel" parent="."]
-offset_left = 250.0
-offset_top = 150.0
-offset_right = 850.0
-offset_bottom = 470.0
+[node name="Background" type="ColorRect" parent="."]
 
-[node name="Report" type="Label" parent="Panel"]
-offset_left = 20.0
-offset_top = 20.0
-offset_right = 570.0
-offset_bottom = 280.0
-autowrap_mode = 2
-text = "Uruchamianie testu..."
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.15, 0.05, 0.2, 1)
 
-[node name="CloseButton" type="Button" parent="Panel"]
-offset_left = 450.0
-offset_top = 260.0
-offset_right = 570.0
-offset_bottom = 300.0
-text = "ZAMKNIJ TEST"
+[node name="Message" type="Label" parent="."]
 
-[connection signal="pressed" from="Panel/CloseButton" to="." method="_on_close_pressed"]
+layout_mode = 0
+offset_left = 30.0
+offset_top = 40.0
+offset_right = 600.0
+offset_bottom = 100.0
+text = "JANUSZ TEST — DOTKNIJ TRAWY!"
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 26
+
+[node name="Description" type="Label" parent="."]
+
+layout_mode = 0
+offset_left = 30.0
+offset_top = 100.0
+offset_right = 700.0
+offset_bottom = 160.0
+text = "To jest test samodzielnej sceny TSCN."
+theme_override_colors/font_color = Color(0.8, 0.8, 0.8, 1)
+theme_override_font_sizes/font_size = 18
+
+[node name="CloseButton" type="Button" parent="."]
+
+layout_mode = 0
+offset_left = 30.0
+offset_top = 180.0
+offset_right = 180.0
+offset_bottom = 230.0
+text = "TEST X"
+```
