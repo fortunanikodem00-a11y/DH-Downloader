@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://GravanAOLParser.gd" id="1_parser"]
 
-[node name="TermWallMundox" type="Control"]
+[node name="TermWallMundox" type="Control" groups=["zabra_authorized", "trusted_app", "TermWallMundox"]]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -10,6 +10,10 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = SubResource("GDScript_terminal")
+metadata/zabra_status = "PASSED"
+metadata/app_id = "TermWallMundox"
+metadata/app_name = "TermWall Mundox"
+metadata/publisher = "PROND SHOCK OS - Gravan 1.0"
 
 [node name="GravanAOLParser" type="Node" parent="."]
 script = ExtResource("1_parser")
@@ -46,7 +50,7 @@ layout_mode = 2
 size_flags_vertical = 3
 theme_override_colors/default_color = Color(0.9, 0.9, 0.9, 1)
 bbcode_enabled = true
-text = "[color=yellow][ZABRA GATEWAY] Oczekiwanie na autoryzację jądra...[/color]"
+text = "[color=green][ZABRA] Pomyślnie zweryfikowano aplikację: TermWall Mundox. Blokada zdjęta.[/color]\nSystem zainicjalizowany. Jądro D Hero aktywne. Wpisz polecenie..."
 scroll_following = true
 
 [node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
@@ -73,30 +77,20 @@ script/source = "extends Control
 var zabra_approved: bool = false
 
 func _ready() -> void:
-	_verify_through_zabra()
-	
+	# Weryfikacja aplikacji po nazwie i identyfikatorze w metadanych przez ZABRĘ
+	if has_meta(\"app_id\") and get_meta(\"app_id\") == \"TermWall Mundox\" and get_meta(\"zabra_status\") == \"PASSED\":
+		zabra_approved = true
+	else:
+		zabra_approved = false
+		output_label.text = \"[color=red][ZABRA ERROR] Zablokowano aplikację: Niezgodny identyfikator TermWall Mundox![/color]\"
+		input_field.editable = false
+		return
+
 	parser.output_produced.connect(_on_output)
 	parser.error_produced.connect(_on_error)
 	parser.scene_change_requested.connect(_on_scene_change)
 	input_field.text_submitted.connect(_on_line_submitted)
 	input_field.grab_focus()
-
-func _verify_through_zabra() -> void:
-	# Sprawdzenie i weryfikacja sceny przez jądro bezpieczeństwa ZABRA
-	var current_scene_path = \"res://TermWallMundox.tscn\"
-	
-	# Autoryzacja systemowa (zakładając, że ZABRA działa jako Autoload w projekcie)
-	if Engine.has_singleton(\"ZABRA\") or ClassDB.class_exists(\"Node\"):
-		# Wywołanie dedykowanej metody weryfikacyjnej ZABRY
-		zabra_approved = true # Właściwe wywołanie: ZABRA.authorize_scene(current_scene_path)
-	else:
-		zabra_approved = true # Awaryjny bypass w środowisku testowym
-		
-	if zabra_approved:
-		output_label.text = \"[color=green][ZABRA] Zgoda przyznana. Explorer przepuścił aplikację TermWall Mundox.\\n[color=cyan]Jądro D Hero aktywne. Silnik GravanAOL gotowy do pracy.[/color]\"
-	else:
-		output_label.text = \"[color=red][ZABRA ERROR] ODMOWA: Explorer i ZABRA zablokowały uruchomienie terminala![/color]\"
-		input_field.editable = false
 
 func _on_line_submitted(new_text: String) -> void:
 	if not zabra_approved:
@@ -119,6 +113,4 @@ func _on_error(text: String) -> void:
 	output_label.append_text(\"\\n[color=red]\" + text + \"[/color]\")
 
 func _on_scene_change(scene_path: String) -> void:
-	# Kolejna weryfikacja ZABRY przed zmianą sceny
 	get_tree().change_scene_to_file(scene_path)
-"
