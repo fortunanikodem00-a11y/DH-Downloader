@@ -1,0 +1,117 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="GDScript" id="GDScript_galeria"]
+script/source = "extends Control
+
+@onready var status_label: Label = $VBoxContainer/TopBar/StatusLabel
+@onready var refresh_button: Button = $VBoxContainer/TopBar/RefreshButton
+@onready var item_list: ItemList = $VBoxContainer/MainSplit/ItemList
+@onready var texture_rect: TextureRect = $VBoxContainer/MainSplit/TextureRect
+
+const USER_DIRECTORY: String = \"user://\"
+var image_paths: Array[String] = []
+
+func _ready() -> void:
+	if refresh_button:
+		refresh_button.pressed.connect(_load_images)
+	if item_list:
+		item_list.item_selected.connect(_on_item_selected)
+		
+	_load_images()
+
+func _set_status(text: String) -> void:
+	if is_instance_valid(status_label):
+		status_label.text = text
+
+func _load_images() -> void:
+	if not is_instance_valid(item_list):
+		return
+		
+	item_list.clear()
+	image_paths.clear()
+	if is_instance_valid(texture_rect):
+		texture_rect.texture = null
+
+	var dir: DirAccess = DirAccess.open(USER_DIRECTORY)
+	if dir == null:
+		_set_status(\"Galeria: Błąd dostępu do user://\")
+		return
+
+	dir.list_dir_begin()
+	var file_name: String = dir.get_next()
+	var count: int = 0
+
+	while not file_name.is_empty():
+		if not dir.current_is_dir():
+			var ext: String = file_name.get_extension().to_lower()
+			if ext in [\"png\", \"jpg\", \"jpeg\", \"webp\"]:
+				item_list.add_item(\"🖼  \" + file_name)
+				image_paths.append(file_name)
+				count += 1
+		file_name = dir.get_next()
+
+	dir.list_dir_end()
+	_set_status(\"Znaleziono obrazów: \" + str(count))
+
+func _on_item_selected(index: int) -> void:
+	if index < 0 or index >= image_paths.size():
+		return
+		
+	var filename: String = image_paths[index]
+	var full_path: String = USER_DIRECTORY + filename
+	
+	if FileAccess.file_exists(full_path):
+		var img: Image = Image.load_from_file(full_path)
+		if img != null and not img.is_empty():
+			texture_rect.texture = ImageTexture.create_from_image(img)
+			_set_status(\"Wyświetlono: \" + filename)
+		else:
+			_set_status(\"Błąd ładowania obrazu: \" + filename)
+"
+
+[node name="Galeria" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = SubResource("GDScript_galeria")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopBar" type="HBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 45)
+layout_mode = 2
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = " PROND SHOCK Galeria"
+vertical_alignment = 1
+
+[node name="RefreshButton" type="Button" parent="VBoxContainer/TopBar"]
+custom_minimum_size = Vector2(90, 0)
+layout_mode = 2
+text = "Odśwież"
+
+[node name="MainSplit" type="HSplitContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 250
+
+[node name="ItemList" type="ItemList" parent="VBoxContainer/MainSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/MainSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+expand_mode = 1
+stretch_mode = 5
