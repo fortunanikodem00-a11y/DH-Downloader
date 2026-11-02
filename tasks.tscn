@@ -1,0 +1,131 @@
+[gd_scene load_steps=2 format=3 uid="uid://task_manager_zabra_ready"]
+
+[sub_resource type="GDScript" id="GDScript_taskman"]
+script/source = "extends Control
+
+# =========================================================
+# PROND SHOCK OS — TASK MANAGER / PROCESS MONITOR (ZABRA)
+# Godot 4.x
+# =========================================================
+
+@onready var process_list: ItemList = $VBoxContainer/ItemList
+@onready var status_label: Label = $VBoxContainer/StatusLabel
+@onready var refresh_btn: Button = $VBoxContainer/TopBar/RefreshButton
+@onready var kill_btn: Button = $VBoxContainer/TopBar/KillButton
+
+var tracked_nodes: Array[Node] = []
+var selected_index: int = -1
+
+
+func _ready() -> void:
+	name = \"TaskManagerApp\"
+
+	if refresh_btn:
+		refresh_btn.pressed.connect(_scan_processes)
+	if kill_btn:
+		kill_btn.pressed.connect(_on_kill_pressed)
+	if process_list:
+		process_list.item_selected.connect(_on_item_selected)
+
+	_scan_processes()
+	_set_status(\"Menedżer Procesów gotowy. ZABRA: Aktywna.\")
+
+
+func _set_status(msg: String) -> void:
+	if is_instance_valid(status_label):
+		status_label.text = msg
+
+
+func _scan_processes() -> void:
+	if not is_instance_valid(process_list):
+		return
+
+	process_list.clear()
+	tracked_nodes.clear()
+	selected_index = -1
+
+	# Szukamy otwartych okien aplikacji (SystemPopup) w całym drzewie sceny głównej
+	var root = get_tree().root
+	_find_app_windows_recursive(root)
+
+	_set_status(\"Znaleziono aktywnych procesów/okien: \" + str(tracked_nodes.size()))
+
+
+func _find_app_windows_recursive(node: Node) -> void:
+	# Nasze okna aplikacji z Menedżera Plików nazywają się 'SystemPopup' lub zawierają aplikacje
+	if node.name == \"SystemPopup\" or node.name.ends_with(\"App\"):
+		tracked_nodes.append(node)
+		var display_name = node.name + \" (ID: \" + str(node.get_instance_id()) + \")\"
+		process_list.add_item(\"🪟 [PROCES] " + display_name + "\")
+
+	for child in node.get_children():
+		_find_app_windows_recursive(child)
+
+
+func _on_item_selected(index: int) -> void:
+	selected_index = index
+	if index >= 0 and index < tracked_nodes.size():
+		var node = tracked_nodes[index]
+		if is_instance_valid(node):
+			_set_status(\"Wybrano proces: \" + node.name)
+
+
+func _on_kill_pressed() -> void:
+	if selected_index < 0 or selected_index >= tracked_nodes.size():
+		_set_status(\"Wybierz proces z listy do zamknięcia.\")
+		return
+
+	var node_to_kill = tracked_nodes[selected_index]
+	if is_instance_valid(node_to_kill):
+		var p_name = node_to_kill.name
+		# Bezpieczne zamknięcie / usunięcie okna z drzewa węzłów
+		node_to_kill.queue_free()
+		_set_status(\"Zabito proces: \" + p_name)
+		# Odśwież listę po krótkiej chwili
+		get_tree().create_timer(0.1).timeout.connect(_scan_processes)
+	else:
+		_set_status(\"Proces już nie istnieje.\")
+		_scan_processes()
+"
+
+[node name="TaskManagerApp" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = SubResource("GDScript_taskman")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopBar" type="HBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="RefreshButton" type="Button" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+text = " 🔄 Odśwież listę "
+
+[node name="KillButton" type="Button" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+text = " ⛔ Zakończ zadanie (Kill) "
+
+[node name="ItemList" type="ItemList" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "ZABRA: Oczekiwanie..."
+horizontal_alignment = 1
