@@ -1,0 +1,173 @@
+[gd_scene load_steps=2 format=3 uid="uid://paint_app_zabra_ready"]
+
+[sub_resource type="GDScript" id="GDScript_paint"]
+script/source = "extends Control
+
+# =========================================================
+# PROND SHOCK OS — PAINT APP (ZABRA COMPATIBLE)
+# Godot 4.x
+# =========================================================
+
+var canvas_texture: ImageTexture
+var canvas_image: Image
+var canvas_size: Vector2i = Vector2i(512, 512)
+var drawing: bool = false
+var brush_color: Color = Color.WHITE
+var brush_size: int = 4
+
+@onready var texture_rect: TextureRect = $VBoxContainer/CenterContainer/TextureRect
+@onready var status_label: Label = $VBoxContainer/StatusLabel
+@onready var color_picker: ColorPickerButton = $VBoxContainer/HBoxContainer/ColorPickerButton
+@onready var size_slider: HSlider = $VBoxContainer/HBoxContainer/SizeSlider
+@onready var new_btn: Button = $VBoxContainer/HBoxContainer/NewButton
+@onready var save_btn: Button = $VBoxContainer/HBoxContainer/SaveButton
+
+
+func _ready() -> void:
+	name = \"PaintApp\"
+
+	# Tworzenie czystego płótna
+	canvas_image = Image.create(canvas_size.x, canvas_size.y, false, Image.FORMAT_RGB8)
+	canvas_image.fill(Color(0.12, 0.12, 0.12))
+	canvas_texture = ImageTexture.create_from_image(canvas_image)
+
+	if texture_rect:
+		texture_rect.texture = canvas_texture
+		texture_rect.gui_input.connect(_on_canvas_gui_input)
+
+	if color_picker:
+		color_picker.color = brush_color
+		color_picker.color_changed.connect(func(c: Color): brush_color = c)
+
+	if size_slider:
+		size_slider.value = brush_size
+		size_slider.value_changed.connect(func(v: float): brush_size = int(v))
+
+	if new_btn:
+		new_btn.pressed.connect(_on_new_pressed)
+
+	if save_btn:
+		save_btn.pressed.connect(_on_save_pressed)
+
+	_set_status(\"Paint gotowy. ZABRA: Połączono.\")
+
+
+func _set_status(msg: String) -> void:
+	if is_instance_valid(status_label):
+		status_label.text = msg
+
+
+func _on_canvas_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			drawing = event.pressed
+			if drawing:
+				_draw_at(texture_rect.get_local_mouse_position())
+
+	elif event is InputEventMouseMotion and drawing:
+		_draw_at(texture_rect.get_local_mouse_position())
+
+
+func _draw_at(pos: Vector2) -> void:
+	if pos.x < 0 or pos.y < 0 or pos.x >= canvas_size.x or pos.y >= canvas_size.y:
+		return
+
+	for x in range(-brush_size, brush_size + 1):
+		for y in range(-brush_size, brush_size + 1):
+			var px = int(pos.x) + x
+			var py = int(pos.y) + y
+			if px >= 0 and py >= 0 and px < canvas_size.x and py < canvas_size.y:
+				if Vector2(x, y).length() <= brush_size:
+					canvas_image.set_pixel(px, py, brush_color)
+
+	canvas_texture.update(canvas_image)
+
+
+func _on_new_pressed() -> void:
+	canvas_image.fill(Color(0.12, 0.12, 0.12))
+	canvas_texture.update(canvas_image)
+	_set_status(\"Utworzono nowe płótno.\")
+
+
+func _on_save_pressed() -> void:
+	# Korzystamy z bezpiecznej ścieżki i nazwy
+	var timestamp = Time.get_datetime_string_from_system().replace(\":\", \"-\")
+	var filename = \"user://paint_\" + timestamp + \".png\"
+
+	var err = canvas_image.save_png(filename)
+	if err == OK:
+		_set_status(\"Zapisano obraz: \" + filename)
+	else:
+		_set_status(\"Błąd zapisu! Kod: \" + str(err))
+"
+
+[node name="PaintApp" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = SubResource("GDScript_paint")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="NewButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = " ➕ Nowy "
+
+[node name="SaveButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = " 💾 Zapisz obraz "
+
+[node name="VSeparator" type="VSeparator" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="LabelColor" type="Label" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = " Kolor: "
+
+[node name="ColorPickerButton" type="ColorPickerButton" parent="VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(40, 0)
+layout_mode = 2
+
+[node name="LabelSize" type="Label" parent="VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = " Rozmiar pędzla: "
+
+[node name="SizeSlider" type="HSlider" parent="VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_vertical = 4
+min_value = 1.0
+max_value = 20.0
+value = 4.0
+
+[node name="CenterContainer" type="CenterContainer" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="TextureRect" type="TextureRect" parent="VBoxContainer/CenterContainer"]
+custom_minimum_size = Vector2(512, 512)
+layout_mode = 2
+expand_mode = 1
+stretch_mode = 5
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "ZABRA: Oczekiwanie..."
+horizontal_alignment = 1
