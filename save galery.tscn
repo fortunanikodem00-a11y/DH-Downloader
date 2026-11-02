@@ -60,6 +60,20 @@ func _on_item_selected(index: int) -> void:
 	var filename: String = image_paths[index]
 	var full_path: String = USER_DIRECTORY + filename
 	
+	# === INTEGRACJA Z JĄDREM ZABRA ===
+	if is_instance_valid(ZABRA) and ZABRA.has_method(\"request_permission\"):
+		_set_status(\"ZABRA: Oczekiwanie na autoryzację...\")
+		var allowed: bool = await ZABRA.request_permission(
+			ZABRA.Action.OPEN_FILE,
+			full_path,
+			\"PROND SHOCK Galeria\"
+		)
+		
+		if not allowed:
+			_set_status(\"ZABRA: Dostęp do obrazu zablokowany.\")
+			return
+	# ================================
+	
 	if FileAccess.file_exists(full_path):
 		var img: Image = Image.load_from_file(full_path)
 		if img != null and not img.is_empty():
