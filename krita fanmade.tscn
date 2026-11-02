@@ -1,114 +1,308 @@
-[gd_scene load_steps=2 format=3 uid="uid://paint_app_zabra_ready"]
+[gd_scene load_steps=3 format=3 uid="uid://termwall_mundox_zabra_ready"]
 
-[sub_resource type="GDScript" id="GDScript_paint"]
+[sub_resource type="GDScript" id="GDScript_parser"]
+script/source = "extends Node
+
+signal output_produced(text: String)
+signal error_produced(text: String)
+signal scene_change_requested(scene_path: String)
+
+var registers: Dictionary = {}
+var config_data: Dictionary = {
+	\"sys_name\": \"TermWall Mundox\",
+	\"version\": \"1.0-PurpleCrow\",
+	\"password\": \"admin\",
+	\"user\": \"root\"
+}
+
+const CONFIG_PATH = \"user://termwall_config.json\"
+
+func _ready() -> void:
+	_load_config()
+
+func parse_and_execute(input_line: String) -> void:
+	var trimmed = input_line.strip_edges()
+	if trimmed.is_empty() or trimmed.begins_with(\"#\") or trimmed.begins_with(\"//\"):
+		return
+
+	var tokens = _tokenize(trimmed)
+	if tokens.is_empty():
+		return
+
+	var command = tokens[0].to_upper()
+	var args = tokens.slice(1)
+
+	_execute_command(command, args)
+
+func _tokenize(line: String) -> Array:
+	var result = []
+	var current = \"\"
+	var in_quotes = false
+
+	for i in range(line.length()):
+		var c = line[i]
+		if c == '\"':
+			in_quotes = !in_quotes
+		elif c == ' ' and not in_quotes:
+			if not current.is_empty():
+				result.append(current)
+				current = \"\"
+		else:
+			current += c
+
+	if not current.is_empty():
+		result.append(current)
+
+	return result
+
+func _execute_command(cmd: String, args: Array) -> void:
+	match cmd:
+		\"SYSINFO\", \"INFO\":
+			output_produced.emit(\"=== TERMWALL MUNDOX (GravanAOL) ===\")
+			output_produced.emit(\"Wersja: \" + config_data.get(\"version\", \"1.0\"))
+			output_produced.emit(\"Użytkownik: \" + config_data.get(\"user\", \"root\"))
+			output_produced.emit(\"Rejestry: \" + str(registers))
+
+		\"CLR\", \"CLEAR\":
+			output_produced.emit(\"__CLEAR__\")
+
+		\"OUT\", \"PRINT\", \"ECHO\":
+			var text = \" \".join(args)
+			output_produced.emit(_resolve_variables(text))
+
+		\"SET\", \"MOV\":
+			if args.size() >= 2:
+				registers[args[0]] = args[1]
+				output_produced.emit(\"[GravanAOL] Ustawiono %s = %s\" % [args[0], args[1]])
+			else:
+				error_produced.emit(\"[Błąd] Użycie: SET <nazwa> <wartość>\")
+
+		\"SETPASS\", \"CHPASS\":
+			if args.size() >= 2:
+				if args[0] == config_data.get(\"password\", \"\"):
+					config_data[\"password\"] = args[1]
+					_save_config()
+					output_produced.emit(\"[TermWall Mundox] Hasło zmienione.\")
+				else:
+					error_produced.emit(\"[Błąd] Niepoprawne stare hasło.\")
+			else:
+				error_produced.emit(\"[Błąd] Użycie: SETPASS <stare_hasło> <nowe_hasło>\")
+
+		\"CFGSET\":
+			if args.size() >= 2:
+				config_data[args[0]] = args[1]
+				_save_config()
+				output_produced.emit(\"[Config] Zaktualizowano klucz: \" + args[0])
+			else:
+				error_produced.emit(\"[Błąd] Użycie: CFGSET <klucz> <wartość>\")
+
+		\"CFGSHOW\":
+			output_produced.emit(\"[Config Data]: \" + str(config_data))
+
+		\"LS\", \"DIR\":
+			var dir = DirAccess.open(\"user://\")
+			if dir:
+				output_produced.emit(\"--- Zawartość user:// ---\")
+				dir.list_dir_begin()
+				var file_name = dir.get_next()
+				while file_name != \"\":
+					output_produced.emit(\" > \" + file_name)
+					file_name = dir.get_next()
+			else:
+				error_produced.emit(\"[Błąd FileSystem] Brak dostępu do user://\")
+
+		\"CAT\", \"READ\":
+			if args.size() >= 1:
+				var path = _fix_path(args[0])
+				if FileAccess.file_exists(path):
+					var f = FileAccess.open(path, FileAccess.READ)
+					output_produced.emit(f.get_as_text())
+					f.close()
+				else:
+					error_produced.emit(\"[Błąd] Plik nie istnieje: \" + path)
+			else:
+				error_produced.emit(\"[Błąd] Użycie: CAT <ścieżka>\")
+
+		\"WRITE\", \"EDIT\":
+			if args.size() >= 2:
+				var path = _fix_path(args[0])
+				var content = \" \".join(args.slice(1))
+				var f = FileAccess.open(path, FileAccess.WRITE)
+				if f:
+					f.store_string(content)
+					f.close()
+					output_produced.emit(\"[FileSystem] Zapisano plik: \" + path)
+				else:
+					error_produced.emit(\"[Błąd] Nie można zapisać: \" + path)
+			else:
+				error_produced.emit(\"[Błąd] Użycie: WRITE <ścieżka> <treść>\")
+
+		\"DEL\", \"RM\":
+			if args.size() >= 1:
+				var path = _fix_path(args[0])
+				if FileAccess.file_exists(path):
+					DirAccess.remove_absolute(path)
+					output_produced.emit(\"[FileSystem] Usunięto plik: \" + path)
+				else:
+					error_produced.emit(\"[Błąd] Plik nie istnieje: \" + path)
+			else:
+				error_produced.emit(\"[Błąd] Użycie: DEL <ścieżka>\")
+
+		\"OPENSCENE\", \"LOADSCENE\":
+			if args.size() >= 1:
+				var scene_path = args[0]
+				if ResourceLoader.exists(scene_path):
+					output_produced.emit(\"[Mundox] Wczytywanie sceny: \" + scene_path)
+					scene_change_requested.emit(scene_path)
+				else:
+					error_produced.emit(\"[Błąd Sceny] Nie odnaleziono: \" + scene_path)
+			else:
+				error_produced.emit(\"[Błąd] Użycie: OPENSCENE <ścieżka.tscn>\")
+
+		\"MAKESCENE\", \"ENCODESCENE\":
+			if args.size() >= 2:
+				var path = _fix_path(args[0])
+				var node_name = args[1]
+				var tscn_content = '[gd_scene load_steps=1 format=3]\\n\\n[node name=\"%s\" type=\"Node2D\"]\\n' % node_name
+				var f = FileAccess.open(path, FileAccess.WRITE)
+				if f:
+					f.store_string(tscn_content)
+					f.close()
+					output_produced.emit(\"[Scene Engine] Zakodowano scenę: \" + path)
+				else:
+					error_produced.emit(\"[Błąd] Brak możliwości utworzenia sceny.\")
+			else:
+				error_produced.emit(\"[Błąd] Użycie: MAKESCENE <ścieżka.tscn> <NazwaWęzła>\")
+
+		\"GHGET\", \"FETCHRAW\":
+			if args.size() >= 2:
+				var raw_url = args[0]
+				var save_path = _fix_path(args[1])
+				output_produced.emit(\"[GitHub Fetcher] Pobieranie: \" + raw_url)
+				_download_github_raw(raw_url, save_path)
+			else:
+				error_produced.emit(\"[Błąd Network] Użycie: GHGET <url> <ścieżka>\")
+
+		\"FIX\", \"REPAIR\":
+			output_produced.emit(\"[Repair Engine] Skanowanie spójności...\")
+			_load_config()
+			output_produced.emit(\" -> Rejestry... [OK]\")
+			output_produced.emit(\" -> Konfiguracja... [OK]\")
+			output_produced.emit(\"[Repair Engine] System spójny.\")
+
+		_:
+			error_produced.emit(\"[Błąd GravanAOL] Nieznana komenda: \" + cmd)
+
+func _resolve_variables(text: String) -> String:
+	for reg in registers.keys():
+		text = text.replace(\"$\" + reg, str(registers[reg]))
+	return text
+
+func _fix_path(path: String) -> String:
+	if not path.begins_with(\"user://\") and not path.begins_with(\"res://\"):
+		return \"user://\" + path
+	return path
+
+func _save_config() -> void:
+	var f = FileAccess.open(CONFIG_PATH, FileAccess.WRITE)
+	if f:
+		f.store_string(JSON.stringify(config_data, \"\\t\"))
+		f.close()
+
+func _load_config() -> void:
+	if FileAccess.file_exists(CONFIG_PATH):
+		var f = FileAccess.open(CONFIG_PATH, FileAccess.READ)
+		var json = JSON.new()
+		if json.parse(f.get_as_text()) == OK:
+			config_data = json.data
+		f.close()
+	else:
+		_save_config()
+
+func _download_github_raw(url: String, save_path: String) -> void:
+	var http = HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(
+		func(result, response_code, headers, body):
+			if response_code == 200:
+				var f = FileAccess.open(save_path, FileAccess.WRITE)
+				if f:
+					f.store_buffer(body)
+					f.close()
+					output_produced.emit(\"[GitHub Fetcher] Zapisano: \" + save_path)
+				else:
+					error_produced.emit(\"[Błąd Zapisu] Nie można zapisać pliku.\")
+			else:
+				error_produced.emit(\"[Błąd HTTP] Kod odpowiedzi: \" + str(response_code))
+			http.queue_free()
+	)
+	var err = http.request(url)
+	if err != OK:
+		error_produced.emit(\"[Błąd HTTP] Problem z połączeniem.\")
+"
+
+[sub_resource type="GDScript" id="GDScript_terminal"]
 script/source = "extends Control
 
 # =========================================================
-# PROND SHOCK OS — PAINT APP (ZABRA COMPATIBLE)
+# PROND SHOCK OS — TERMWALL MUNDOX (ZABRA COMPATIBLE)
 # Godot 4.x
 # =========================================================
 
-var canvas_texture: ImageTexture
-var canvas_image: Image
-var canvas_size: Vector2i = Vector2i(512, 512)
-var drawing: bool = false
-var brush_color: Color = Color.WHITE
-var brush_size: int = 4
-
-@onready var texture_rect: TextureRect = $VBoxContainer/CenterContainer/TextureRect
+@onready var parser = $GravanAOLParser
+@onready var output_label: RichTextLabel = $VBoxContainer/RichTextLabel
+@onready var input_field: LineEdit = $VBoxContainer/HBoxContainer/LineEdit
 @onready var status_label: Label = $VBoxContainer/StatusLabel
-@onready var color_picker: ColorPickerButton = $VBoxContainer/HBoxContainer/ColorPickerButton
-@onready var size_slider: HSlider = $VBoxContainer/HBoxContainer/SizeSlider
-@onready var new_btn: Button = $VBoxContainer/HBoxContainer/NewButton
-@onready var save_btn: Button = $VBoxContainer/HBoxContainer/SaveButton
-
 
 func _ready() -> void:
-	name = \"PaintApp\"
+	name = \"TermWallMundox\"
 
-	# Tworzenie czystego płótna
-	canvas_image = Image.create(canvas_size.x, canvas_size.y, false, Image.FORMAT_RGB8)
-	canvas_image.fill(Color(0.12, 0.12, 0.12))
-	canvas_texture = ImageTexture.create_from_image(canvas_image)
+	if parser:
+		parser.output_produced.connect(_on_output)
+		parser.error_produced.connect(_on_error)
+		parser.scene_change_requested.connect(_on_scene_change)
 
-	if texture_rect:
-		texture_rect.texture = canvas_texture
-		texture_rect.gui_input.connect(_on_canvas_gui_input)
+	if input_field:
+		input_field.text_submitted.connect(_on_line_submitted)
+		input_field.grab_focus()
 
-	if color_picker:
-		color_picker.color = brush_color
-		color_picker.color_changed.connect(func(c: Color): brush_color = c)
-
-	if size_slider:
-		size_slider.value = brush_size
-		size_slider.value_changed.connect(func(v: float): brush_size = int(v))
-
-	if new_btn:
-		new_btn.pressed.connect(_on_new_pressed)
-
-	if save_btn:
-		save_btn.pressed.connect(_on_save_pressed)
-
-	_set_status(\"Paint gotowy. ZABRA: Połączono.\")
-
+	_set_status(\"TermWall Mundox gotowy. ZABRA: Połączono.\")
 
 func _set_status(msg: String) -> void:
 	if is_instance_valid(status_label):
 		status_label.text = msg
 
-
-func _on_canvas_gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			drawing = event.pressed
-			if drawing:
-				_draw_at(texture_rect.get_local_mouse_position())
-
-	elif event is InputEventMouseMotion and drawing:
-		_draw_at(texture_rect.get_local_mouse_position())
-
-
-func _draw_at(pos: Vector2) -> void:
-	if pos.x < 0 or pos.y < 0 or pos.x >= canvas_size.x or pos.y >= canvas_size.y:
+func _on_line_submitted(new_text: String) -> void:
+	if new_text.strip_edges().is_empty():
 		return
+	output_label.append_text(\"\\n[color=green]root@mundox:~$ [/color]\" + new_text)
+	input_field.clear()
+	parser.parse_and_execute(new_text)
 
-	for x in range(-brush_size, brush_size + 1):
-		for y in range(-brush_size, brush_size + 1):
-			var px = int(pos.x) + x
-			var py = int(pos.y) + y
-			if px >= 0 and py >= 0 and px < canvas_size.x and py < canvas_size.y:
-				if Vector2(x, y).length() <= brush_size:
-					canvas_image.set_pixel(px, py, brush_color)
-
-	canvas_texture.update(canvas_image)
-
-
-func _on_new_pressed() -> void:
-	canvas_image.fill(Color(0.12, 0.12, 0.12))
-	canvas_texture.update(canvas_image)
-	_set_status(\"Utworzono nowe płótno.\")
-
-
-func _on_save_pressed() -> void:
-	# Korzystamy z bezpiecznej ścieżki i nazwy
-	var timestamp = Time.get_datetime_string_from_system().replace(\":\", \"-\")
-	var filename = \"user://paint_\" + timestamp + \".png\"
-
-	var err = canvas_image.save_png(filename)
-	if err == OK:
-		_set_status(\"Zapisano obraz: \" + filename)
+func _on_output(text: String) -> void:
+	if text == \"__CLEAR__\":
+		output_label.text = \"\"
 	else:
-		_set_status(\"Błąd zapisu! Kod: \" + str(err))
+		output_label.append_text(\"\\n\" + text)
+
+func _on_error(text: String) -> void:
+	output_label.append_text(\"\\n[color=red]\" + text + \"[/color]\")
+
+func _on_scene_change(scene_path: String) -> void:
+	get_tree().change_scene_to_file(scene_path)
 "
 
-[node name="PaintApp" type="Control"]
+[node name="TermWallMundox" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = SubResource("GDScript_paint")
+script = SubResource("GDScript_terminal")
+
+[node name="GravanAOLParser" type="Node" parent="."]
+script = SubResource("GDScript_parser")
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -122,50 +316,33 @@ offset_bottom = -10.0
 grow_horizontal = 2
 grow_vertical = 2
 
+[node name="HeaderLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.4, 0.9, 1)
+text = "=== TERMWALL MUNDOX | Gravan 1.0 (PurpleCrow) ==="
+
+[node name="RichTextLabel" type="RichTextLabel" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_colors/default_color = Color(0.9, 0.9, 0.9, 1)
+bbcode_enabled = true
+text = "System zainicjalizowany. Jądro D Hero aktywne. Wpisz polecenie (np. SYSINFO, LS, GHGET)..."
+scroll_following = true
+
 [node name="HBoxContainer" type="HBoxContainer" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 
-[node name="NewButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+[node name="PromptLabel" type="Label" parent="VBoxContainer/HBoxContainer"]
 layout_mode = 2
-text = " ➕ Nowy "
+theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
+text = "root@mundox:~$ "
 
-[node name="SaveButton" type="Button" parent="VBoxContainer/HBoxContainer"]
+[node name="LineEdit" type="LineEdit" parent="VBoxContainer/HBoxContainer"]
 layout_mode = 2
-text = " 💾 Zapisz obraz "
-
-[node name="VSeparator" type="VSeparator" parent="VBoxContainer/HBoxContainer"]
-layout_mode = 2
-
-[node name="LabelColor" type="Label" parent="VBoxContainer/HBoxContainer"]
-layout_mode = 2
-text = " Kolor: "
-
-[node name="ColorPickerButton" type="ColorPickerButton" parent="VBoxContainer/HBoxContainer"]
-custom_minimum_size = Vector2(40, 0)
-layout_mode = 2
-
-[node name="LabelSize" type="Label" parent="VBoxContainer/HBoxContainer"]
-layout_mode = 2
-text = " Rozmiar pędzla: "
-
-[node name="SizeSlider" type="HSlider" parent="VBoxContainer/HBoxContainer"]
-custom_minimum_size = Vector2(120, 0)
-layout_mode = 2
-size_flags_vertical = 4
-min_value = 1.0
-max_value = 20.0
-value = 4.0
-
-[node name="CenterContainer" type="CenterContainer" parent="VBoxContainer"]
-layout_mode = 2
-size_flags_vertical = 3
-
-[node name="TextureRect" type="TextureRect" parent="VBoxContainer/CenterContainer"]
-custom_minimum_size = Vector2(512, 512)
-layout_mode = 2
-expand_mode = 1
-stretch_mode = 5
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+flat = true
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 layout_mode = 2
