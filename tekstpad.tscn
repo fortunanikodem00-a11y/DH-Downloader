@@ -1,0 +1,194 @@
+[gd_scene load_steps=2 format=3 uid="uid://notepad_app_zabra_ready"]
+
+[sub_resource type="GDScript" id="GDScript_notepad"]
+script/source = "extends Control
+
+# =========================================================
+# PROND SHOCK OS — NOTEPAD APP WITH FONT IMPORT (ZABRA)
+# Godot 4.x
+# =========================================================
+
+@onready var text_edit: TextEdit = $VBoxContainer/TextEdit
+@onready var filename_input: LineEdit = $VBoxContainer/TopBar/FilenameInput
+@onready var status_label: Label = $VBoxContainer/StatusLabel
+@onready var save_btn: Button = $VBoxContainer/TopBar/SaveButton
+@onready var open_btn: Button = $VBoxContainer/TopBar/OpenButton
+@onready var new_btn: Button = $VBoxContainer/TopBar/NewButton
+@onready var font_menu_btn: MenuButton = $VBoxContainer/TopBar/FontMenuButton
+
+
+func _ready() -> void:
+	name = \"NotePadApp\"
+
+	if save_btn:
+		save_btn.pressed.connect(_on_save_pressed)
+	if open_btn:
+		open_btn.pressed.connect(_on_open_pressed)
+	if new_btn:
+		new_btn.pressed.connect(_on_new_pressed)
+
+	# Konfiguracja zakładki Font -> Import
+	if font_menu_btn:
+		var popup = font_menu_btn.get_popup()
+		popup.clear()
+		popup.add_item(\"📂 Importuj plik czcionki (.ttf / .otf)\", 1)
+		popup.add_item(\"🔄 Przywróć domyślną czcionkę\", 2)
+		popup.id_pressed.connect(_on_font_menu_pressed)
+
+	_set_status(\"Notatnik gotowy. ZABRA: Aktywna.\")
+
+
+func _set_status(msg: String) -> void:
+	if is_instance_valid(status_label):
+		status_label.text = msg
+
+
+func _on_new_pressed() -> void:
+	if is_instance_valid(text_edit):
+		text_edit.text = \"\"
+	if is_instance_valid(filename_input):
+		filename_input.text = \"\"
+	_set_status(\"Utworzono nowy notatnik.\")
+
+
+func _on_save_pressed() -> void:
+	var fname = filename_input.text.strip_edges() if is_instance_valid(filename_input) else \"\"
+	if fname.is_empty():
+		var timestamp = Time.get_datetime_string_from_system().replace(\":\", \"-\")
+		fname = \"notatka_\" + timestamp + \".txt\"
+	
+	if not fname.ends_with(\".txt\"):
+		fname += \".txt\"
+
+	var full_path = fname if fname.begins_with(\"user://\") else \"user://\" + fname
+	var file = FileAccess.open(full_path, FileAccess.WRITE)
+	
+	if file != null:
+		file.store_string(text_edit.text if is_instance_valid(text_edit) else \"\")
+		file.close()
+		_set_status(\"Zapisano pomyślnie: \" + full_path)
+	else:
+		_set_status(\"Błąd zapisu pliku!\")
+
+
+func _on_open_pressed() -> void:
+	var fname = filename_input.text.strip_edges() if is_instance_valid(filename_input) else \"\"
+	if fname.is_empty():
+		_set_status(\"Wpisz nazwę pliku do otwarcia.\")
+		return
+
+	var full_path = fname if fname.begins_with(\"user://\") else \"user://\" + fname
+	if not FileAccess.file_exists(full_path):
+		_set_status(\"Plik nie istnieje: \" + full_path)
+		return
+
+	var file = FileAccess.open(full_path, FileAccess.READ)
+	if file != null:
+		if is_instance_valid(text_edit):
+			text_edit.text = file.get_as_text()
+		file.close()
+		_set_status(\"Otwarto plik: \" + full_path)
+	else:
+		_set_status(\"Błąd odczytu pliku!\")
+
+
+func _on_font_menu_pressed(id: int) -> void:
+	if id == 1:
+		# Import czcionki podanej w polu tekstowym (np. 'mojachrzcionka.ttf')
+		var font_name = filename_input.text.strip_edges() if is_instance_valid(filename_input) else \"\"
+		if font_name.is_empty():
+			_set_status(\"Wpisz nazwę pliku czcionki w pole pliku (np. font.ttf)\")
+			return
+
+		var font_path = font_name if font_name.begins_with(\"user://\") else \"user://\" + font_name
+		if not FileAccess.file_exists(font_path):
+			_set_status(\"Nie znaleziono pliku czcionki w user://: \" + font_path)
+			return
+
+		var font = FontFile.new()
+		var err = font.load_loadable_font_support(font_path) # lub standardowe wczytanie danych
+		# W Godot 4 najpewniej wczytujemy dane buforem:
+		var f_data = FileAccess.open(font_path, FileAccess.READ)
+		if f_data != null:
+			var buffer = f_data.get_buffer(f_data.get_length())
+			f_data.close()
+			
+			var new_font = FontFile.new()
+			new_font.load_dynamic_font_data_from_buffer(buffer)
+			
+			if is_instance_valid(text_edit):
+				text_edit.add_theme_font_override(\"font\", new_font)
+			_set_status(\"Zaimportowano i zastosowano czcionkę: \" + font_path)
+		else:
+			_set_status(\"Błąd ładowania pliku czcionki.\")
+
+	elif id == 2:
+		# Reset czcionki do domyślnej
+		if is_instance_valid(text_edit):
+			text_edit.remove_theme_font_override(\"font\")
+		_set_status(\"Przywrócono domyślną czcionkę systemową.\")
+"
+
+[node name="NotePadApp" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = SubResource("GDScript_notepad")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 10.0
+offset_right = -10.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TopBar" type="HBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+
+[node name="NewButton" type="Button" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+text = " 📄 Nowy "
+
+[node name="Label" type="Label" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+text = " Plik / Czcionka: "
+
+[node name="FilenameInput" type="LineEdit" parent="VBoxContainer/TopBar"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+placeholder_text = "np. notatka.txt lub font.ttf"
+
+[node name="OpenButton" type="Button" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+text = " 📂 Otwórz "
+
+[node name="SaveButton" type="Button" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+text = " 💾 Zapisz "
+
+[node name="VSeparator" type="VSeparator" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+
+[node name="FontMenuButton" type="MenuButton" parent="VBoxContainer/TopBar"]
+layout_mode = 2
+text = " 🔤 Font ▾ "
+flat = false
+
+[node name="TextEdit" type="TextEdit" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+placeholder_text = "Wpisz tekst notatki lub zaimportuj własną czcionkę (.ttf / .otf)..."
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "ZABRA: Oczekiwanie..."
+horizontal_alignment = 1
